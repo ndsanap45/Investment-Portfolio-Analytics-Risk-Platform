@@ -24,6 +24,20 @@ from app.services.market_data_service import (
     sync_asset_market_data,
     sync_portfolio_market_data
 )
+from app.services.historical_perfomance_service import (
+    calculate_historical_performance
+)
+
+from app.services.market_data_service import (
+    sync_benchmark_market_data
+)
+
+from app.services.drawdown_service import calculate_drawdown
+
+from app.services.stress_test_service import (
+    calculate_stress_tests,
+    get_stress_tests,
+)
 
 router = APIRouter(
     prefix="/portfolios",
@@ -178,3 +192,80 @@ def sync_asset_data(
             status_code=500,
             detail=str(e)
         )
+    
+@router.post(
+    "/{portfolio_id}/benchmark/sync"
+)
+def sync_benchmark(
+    portfolio_id: int,
+    db: Session = Depends(get_db)
+):
+    try:
+        result = sync_benchmark_market_data(
+            db=db,
+            benchmark_symbol="NIFTY50",
+            period="1y",
+            interval="1d"
+        )
+
+        return {
+            "message": "NIFTY50 benchmark synchronized successfully",
+            "portfolio_id": portfolio_id,
+            **result
+        }
+
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=str(e)
+        )
+
+
+@router.get(
+    "/{portfolio_id}/historical-performance"
+)
+def get_historical_performance(
+    portfolio_id: int,
+    db: Session = Depends(get_db)
+):
+    try:
+        return calculate_historical_performance(
+            db,
+            portfolio_id
+        )
+
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=str(e)
+        )
+
+@router.get("/{portfolio_id}/drawdown")
+def get_portfolio_drawdown(
+    portfolio_id: int,
+    db: Session = Depends(get_db),
+):
+    return calculate_drawdown(
+        db=db,
+        portfolio_id=portfolio_id,
+    )
+@router.post("/{portfolio_id}/stress-test")
+def run_stress_test(
+    portfolio_id: int,
+    db: Session = Depends(get_db),
+):
+    return calculate_stress_tests(
+        db=db,
+        portfolio_id=portfolio_id,
+    )
+
+
+@router.get("/{portfolio_id}/stress-tests")
+def list_stress_tests(
+    portfolio_id: int,
+    db: Session = Depends(get_db),
+):
+    return get_stress_tests(
+        db=db,
+        portfolio_id=portfolio_id,
+    )

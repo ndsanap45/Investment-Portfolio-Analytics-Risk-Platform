@@ -6,12 +6,23 @@ from sqlalchemy.orm import Session
 from app.models import Asset, Price
 
 
+def get_yahoo_symbol(symbol: str, asset_type: str = "EQUITY"):
+    if asset_type.upper() == "INDEX":
+        return "^NSEI"
+
+    return f"{symbol}.NS"
+
+
 def fetch_historical_prices(
     symbol: str,
     period: str = "1y",
-    interval: str = "1d"
+    interval: str = "1d",
+    asset_type: str = "EQUITY"
 ):
-    ticker_symbol = f"{symbol}.NS"
+    ticker_symbol = get_yahoo_symbol(
+        symbol,
+        asset_type
+    )
 
     ticker = yf.Ticker(ticker_symbol)
 
@@ -49,7 +60,8 @@ def sync_asset_market_data(
     history = fetch_historical_prices(
         asset.symbol,
         period,
-        interval
+        interval,
+        asset.asset_type
     )
 
     records_inserted = 0
@@ -75,21 +87,27 @@ def sync_asset_market_data(
         if existing_price:
             continue
 
+        close_price = row["Close"]
+
+        if close_price is None:
+            continue
+
         price_record = Price(
             asset_id=asset.id,
-            price=Decimal(str(row["Close"])),
+            price=Decimal(str(close_price)),
             open_price=Decimal(str(row["Open"])),
             high_price=Decimal(str(row["High"])),
             low_price=Decimal(str(row["Low"])),
-            close_price=Decimal(str(row["Close"])),
-            volume=Decimal(str(row["Volume"]))
-            if row["Volume"] is not None
-            else None,
+            close_price=Decimal(str(close_price)),
+            volume=(
+                Decimal(str(row["Volume"]))
+                if row["Volume"] is not None
+                else None
+            ),
             timestamp=timestamp
         )
 
         db.add(price_record)
-
         records_inserted += 1
 
     db.commit()
@@ -156,4 +174,48 @@ def sync_portfolio_market_data(
     return {
         "portfolio_id": portfolio_id,
         "results": results
+    }
+
+
+def sync_benchmark_market_data(
+    db: Session,
+    benchmark_symbol: str = "NIFTY50",
+    period: str = "1y",
+    interval: str = "1d"
+):
+    benchmark = (
+        db.query(Asset)
+        .filter(
+            Asset.symbol == benchmark_symbol,
+            Asset.asset_type == "INDEX"
+        )
+        .first()
+    )
+
+    if not benchmark:
+        benchmark = Asset(
+            symbol=benchmark_symbol,
+            name="NIFTY 50",
+            asset_type="INDEX",
+            exchange="NSE",
+            currency="INR",
+            sector="Market Index",
+            country="India",
+            is_active=True
+        )
+
+        db.add(benchmark)
+        db.flush()
+
+    result = sync_asset_market_data(
+        db=db,
+        asset_id=benchmark.id,
+        period=period,
+        interval=interval
+    )
+
+    return {
+        **result,
+        "benchmark": benchmark_symbol,
+        "status": "success"
     }
