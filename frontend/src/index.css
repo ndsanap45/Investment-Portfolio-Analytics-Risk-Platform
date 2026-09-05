@@ -1,0 +1,11 @@
+* {
+  margin: 0px;
+  padding: 5px;
+  box-sizing: border-box;
+  align-content: center;
+}
+
+body {
+  font-family: 'Times New Roman', Times, serif;
+  background: #f5f7fa;
+}
