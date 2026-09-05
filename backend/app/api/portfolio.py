@@ -12,6 +12,10 @@ from app.services.risk_service import (
     save_risk_metrics
 )
 
+from app.services.allocation_service import (
+    calculate_portfolio_allocation
+)
+
 router = APIRouter(
     prefix="/portfolios",
     tags=["Portfolios"]
@@ -82,3 +86,13 @@ def calculate_and_save_risk(
         "portfolio_id": portfolio_id,
         "metrics": metrics
     }
+
+@router.get("/{portfolio_id}/allocation")
+def get_portfolio_allocation(
+    portfolio_id: int,
+    db: Session = Depends(get_db)
+):
+    return calculate_portfolio_allocation(
+        db,
+        portfolio_id
+    )
