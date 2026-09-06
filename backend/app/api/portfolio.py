@@ -2,6 +2,16 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.db.database import get_db
+
+from app.models import Portfolio
+from app.models import User
+from app.core.security import get_current_user, get_owned_portfolio
+
+router = APIRouter(
+    prefix="/portfolios",
+    tags=["Portfolios"],
+)
+
 from app.services.portfolio_service import (
     calculate_portfolio_holdings,
     sync_holdings
@@ -48,6 +58,7 @@ router = APIRouter(
 @router.get("/{portfolio_id}/holdings")
 def get_portfolio_holdings(
     portfolio_id: int,
+    portfolio: Portfolio = Depends(get_owned_portfolio),
     db: Session = Depends(get_db)
 ):
     holdings = calculate_portfolio_holdings(
@@ -70,6 +81,7 @@ def get_portfolio_holdings(
 @router.post("/{portfolio_id}/sync-holdings")
 def sync_portfolio_holdings(
     portfolio_id: int,
+    portfolio: Portfolio = Depends(get_owned_portfolio),
     db: Session = Depends(get_db)
 ):
     holdings = sync_holdings(
@@ -86,6 +98,7 @@ def sync_portfolio_holdings(
 @router.get("/{portfolio_id}/risk")
 def get_portfolio_risk(
     portfolio_id: int,
+    portfolio: Portfolio = Depends(get_owned_portfolio),
     db: Session = Depends(get_db)
 ):
     return calculate_risk_metrics(
@@ -96,6 +109,7 @@ def get_portfolio_risk(
 @router.get("/{portfolio_id}/performance")
 def get_portfolio_performance(
     portfolio_id: int,
+    portfolio: Portfolio = Depends(get_owned_portfolio),
     db: Session = Depends(get_db)
 ):
     performance = calculate_portfolio_performance(
@@ -109,6 +123,7 @@ def get_portfolio_performance(
 @router.post("/{portfolio_id}/risk/calculate")
 def calculate_and_save_risk(
     portfolio_id: int,
+    portfolio: Portfolio = Depends(get_owned_portfolio),
     db: Session = Depends(get_db)
 ):
     metrics = save_risk_metrics(
@@ -125,6 +140,7 @@ def calculate_and_save_risk(
 @router.get("/{portfolio_id}/allocation")
 def get_portfolio_allocation(
     portfolio_id: int,
+    portfolio: Portfolio = Depends(get_owned_portfolio),
     db: Session = Depends(get_db)
 ):
     return calculate_portfolio_allocation(
@@ -135,6 +151,7 @@ def get_portfolio_allocation(
 @router.post("/{portfolio_id}/market-data/sync")
 def sync_market_data(
     portfolio_id: int,
+    portfolio: Portfolio = Depends(get_owned_portfolio),
     db: Session = Depends(get_db)
 ):
     try:
@@ -166,6 +183,7 @@ def sync_market_data(
 def sync_asset_data(
     portfolio_id: int,
     asset_id: int,
+    portfolio: Portfolio = Depends(get_owned_portfolio),
     db: Session = Depends(get_db)
 ):
     try:
@@ -198,6 +216,7 @@ def sync_asset_data(
 )
 def sync_benchmark(
     portfolio_id: int,
+    portfolio: Portfolio = Depends(get_owned_portfolio),
     db: Session = Depends(get_db)
 ):
     try:
@@ -226,6 +245,7 @@ def sync_benchmark(
 )
 def get_historical_performance(
     portfolio_id: int,
+    portfolio: Portfolio = Depends(get_owned_portfolio),
     db: Session = Depends(get_db)
 ):
     try:
@@ -243,6 +263,7 @@ def get_historical_performance(
 @router.get("/{portfolio_id}/drawdown")
 def get_portfolio_drawdown(
     portfolio_id: int,
+    portfolio: Portfolio = Depends(get_owned_portfolio),
     db: Session = Depends(get_db),
 ):
     return calculate_drawdown(
@@ -252,6 +273,7 @@ def get_portfolio_drawdown(
 @router.post("/{portfolio_id}/stress-test")
 def run_stress_test(
     portfolio_id: int,
+    portfolio: Portfolio = Depends(get_owned_portfolio),
     db: Session = Depends(get_db),
 ):
     return calculate_stress_tests(
@@ -263,9 +285,129 @@ def run_stress_test(
 @router.get("/{portfolio_id}/stress-tests")
 def list_stress_tests(
     portfolio_id: int,
+    portfolio: Portfolio = Depends(get_owned_portfolio),
     db: Session = Depends(get_db),
 ):
     return get_stress_tests(
         db=db,
         portfolio_id=portfolio_id,
     )
+
+
+
+@router.get("")
+def get_portfolios(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    portfolios = (
+        db.query(Portfolio)
+        .filter(Portfolio.user_id == current_user.id)
+        .order_by(Portfolio.id.asc())
+        .all()
+    )
+
+    return {
+        "portfolios": [
+            {
+                "id": portfolio.id,
+                "name": portfolio.name,
+                "benchmark": portfolio.benchmark,
+            }
+            for portfolio in portfolios
+        ]
+    }
+
+
+@router.post("")
+def create_portfolio(
+    portfolio_data: dict,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    name = portfolio_data.get("name")
+    benchmark = portfolio_data.get("benchmark", "NIFTY50")
+
+    if not name or not name.strip():
+        raise HTTPException(
+            status_code=400,
+            detail="Portfolio name is required",
+        )
+
+    existing = (
+        db.query(Portfolio)
+        .filter(
+            Portfolio.name == name.strip(),
+            Portfolio.user_id == current_user.id,
+        )
+        .first()
+    )
+
+    if existing:
+        raise HTTPException(
+            status_code=409,
+            detail="Portfolio already exists",
+        )
+
+    portfolio = Portfolio(
+        user_id=current_user.id,
+        name=name.strip(),
+        benchmark=benchmark,
+    )
+
+    db.add(portfolio)
+    db.commit()
+    db.refresh(portfolio)
+
+    return {
+        "id": portfolio.id,
+        "name": portfolio.name,
+        "benchmark": portfolio.benchmark,
+    }
+
+
+@router.put("/{portfolio_id}")
+def update_portfolio(
+    portfolio_id: int,
+    portfolio_data: dict,
+    portfolio: Portfolio = Depends(get_owned_portfolio),
+    db: Session = Depends(get_db),
+):
+    name = portfolio_data.get("name")
+    benchmark = portfolio_data.get("benchmark")
+
+    if name is not None:
+        if not name.strip():
+            raise HTTPException(
+                status_code=400,
+                detail="Portfolio name cannot be empty",
+            )
+
+        portfolio.name = name.strip()
+
+    if benchmark is not None:
+        portfolio.benchmark = benchmark
+
+    db.commit()
+    db.refresh(portfolio)
+
+    return {
+        "id": portfolio.id,
+        "name": portfolio.name,
+        "benchmark": portfolio.benchmark,
+    }
+
+
+@router.delete("/{portfolio_id}")
+def delete_portfolio(
+    portfolio_id: int,
+    portfolio: Portfolio = Depends(get_owned_portfolio),
+    db: Session = Depends(get_db),
+):
+    db.delete(portfolio)
+    db.commit()
+
+    return {
+        "message": "Portfolio deleted successfully",
+        "portfolio_id": portfolio_id,
+    }

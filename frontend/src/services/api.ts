@@ -14,9 +14,16 @@ async function fetchApi<T>(
   endpoint: string,
   options?: RequestInit
 ): Promise<T> {
+  const token = localStorage.getItem('access_token')
+  const headers = new Headers(options?.headers)
+
+  if (token) {
+    headers.set('Authorization', `Bearer ${token}`)
+  }
+
   const response = await fetch(
     `${API_BASE_URL}${endpoint}`,
-    options
+    { ...options, headers }
   )
 
   if (!response.ok) {
@@ -113,4 +120,88 @@ export function runStressTest(
       method: 'POST',
     }
   )
+}
+
+export interface Portfolio {
+  id: number
+  name: string
+  benchmark: string
+}
+
+export interface PortfoliosResponse {
+  portfolios: Portfolio[]
+}
+
+export function getPortfolios(): Promise<PortfoliosResponse> {
+  return fetchApi<PortfoliosResponse>('/portfolios')
+}
+
+export function createPortfolio(
+  name: string,
+  benchmark: string
+): Promise<Portfolio> {
+  return fetchApi<Portfolio>('/portfolios', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      name,
+      benchmark,
+    }),
+  })
+}
+
+export function updatePortfolio(
+  portfolioId: number,
+  name: string,
+  benchmark: string
+): Promise<Portfolio> {
+  return fetchApi<Portfolio>(
+    `/portfolios/${portfolioId}`,
+    {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        name,
+        benchmark,
+      }),
+    }
+  )
+}
+
+export function deletePortfolio(
+  portfolioId: number
+): Promise<{ message: string; portfolio_id: number }> {
+  return fetchApi<{
+    message: string
+    portfolio_id: number
+  }>(`/portfolios/${portfolioId}`, {
+    method: 'DELETE',
+  })
+}
+
+export interface AuthUser {
+  id: number
+  name: string
+  email: string
+}
+
+export interface AuthResponse {
+  access_token: string
+  token_type: string
+  user: AuthUser
+}
+
+export function login(
+  email: string,
+  password: string
+): Promise<AuthResponse> {
+  return fetchApi<AuthResponse>('/auth/login', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email, password }),
+  })
 }

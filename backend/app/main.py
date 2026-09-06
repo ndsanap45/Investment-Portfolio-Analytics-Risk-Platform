@@ -3,6 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.db.database import engine, Base
 from app.db.database import engine
 from app.api.portfolio import router as portfolio_router
+from app.routers.auth import router as auth_router
 
 app = FastAPI(
     title="Investment Portfolio Analytics & Risk Platform",
@@ -18,6 +19,7 @@ app.add_middleware(
 )
 
 app.include_router(portfolio_router)
+app.include_router(auth_router)
 
 
 
