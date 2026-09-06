@@ -2,6 +2,14 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.db.database import get_db
+
+from app.models import Portfolio
+
+router = APIRouter(
+    prefix="/portfolios",
+    tags=["Portfolios"],
+)
+
 from app.services.portfolio_service import (
     calculate_portfolio_holdings,
     sync_holdings
@@ -269,3 +277,137 @@ def list_stress_tests(
         db=db,
         portfolio_id=portfolio_id,
     )
+
+
+
+@router.get("")
+def get_portfolios(
+    db: Session = Depends(get_db),
+):
+    portfolios = (
+        db.query(Portfolio)
+        .order_by(Portfolio.id.asc())
+        .all()
+    )
+
+    return {
+        "portfolios": [
+            {
+                "id": portfolio.id,
+                "name": portfolio.name,
+                "benchmark": portfolio.benchmark,
+            }
+            for portfolio in portfolios
+        ]
+    }
+
+
+@router.post("")
+def create_portfolio(
+    portfolio_data: dict,
+    db: Session = Depends(get_db),
+):
+    name = portfolio_data.get("name")
+    benchmark = portfolio_data.get("benchmark", "NIFTY50")
+
+    if not name or not name.strip():
+        raise HTTPException(
+            status_code=400,
+            detail="Portfolio name is required",
+        )
+
+    existing = (
+        db.query(Portfolio)
+        .filter(Portfolio.name == name.strip())
+        .first()
+    )
+
+    if existing:
+        raise HTTPException(
+            status_code=409,
+            detail="Portfolio already exists",
+        )
+
+    portfolio = Portfolio(
+        name=name.strip(),
+        benchmark=benchmark,
+    )
+
+    db.add(portfolio)
+    db.commit()
+    db.refresh(portfolio)
+
+    return {
+        "id": portfolio.id,
+        "name": portfolio.name,
+        "benchmark": portfolio.benchmark,
+    }
+
+
+@router.put("/{portfolio_id}")
+def update_portfolio(
+    portfolio_id: int,
+    portfolio_data: dict,
+    db: Session = Depends(get_db),
+):
+    portfolio = (
+        db.query(Portfolio)
+        .filter(Portfolio.id == portfolio_id)
+        .first()
+    )
+
+    if not portfolio:
+        raise HTTPException(
+            status_code=404,
+            detail="Portfolio not found",
+        )
+
+    name = portfolio_data.get("name")
+    benchmark = portfolio_data.get("benchmark")
+
+    if name is not None:
+        if not name.strip():
+            raise HTTPException(
+                status_code=400,
+                detail="Portfolio name cannot be empty",
+            )
+
+        portfolio.name = name.strip()
+
+    if benchmark is not None:
+        portfolio.benchmark = benchmark
+
+    db.commit()
+    db.refresh(portfolio)
+
+    return {
+        "id": portfolio.id,
+        "name": portfolio.name,
+        "benchmark": portfolio.benchmark,
+    }
+
+
+@router.delete("/{portfolio_id}")
+def delete_portfolio(
+    portfolio_id: int,
+    db: Session = Depends(get_db),
+):
+    portfolio = (
+        db.query(Portfolio)
+        .filter(Portfolio.id == portfolio_id)
+        .first()
+    )
+
+    if not portfolio:
+        raise HTTPException(
+            status_code=404,
+            detail="Portfolio not found",
+        )
+
+    db.delete(portfolio)
+    db.commit()
+
+    return {
+        "message": "Portfolio deleted successfully",
+        "portfolio_id": portfolio_id,
+    }

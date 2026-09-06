@@ -114,3 +114,64 @@ export function runStressTest(
     }
   )
 }
+
+export interface Portfolio {
+  id: number
+  name: string
+  benchmark: string
+}
+
+export interface PortfoliosResponse {
+  portfolios: Portfolio[]
+}
+
+export function getPortfolios(): Promise<PortfoliosResponse> {
+  return fetchApi<PortfoliosResponse>('/portfolios')
+}
+
+export function createPortfolio(
+  name: string,
+  benchmark: string
+): Promise<Portfolio> {
+  return fetchApi<Portfolio>('/portfolios', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      name,
+      benchmark,
+    }),
+  })
+}
+
+export function updatePortfolio(
+  portfolioId: number,
+  name: string,
+  benchmark: string
+): Promise<Portfolio> {
+  return fetchApi<Portfolio>(
+    `/portfolios/${portfolioId}`,
+    {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        name,
+        benchmark,
+      }),
+    }
+  )
+}
+
+export function deletePortfolio(
+  portfolioId: number
+): Promise<{ message: string; portfolio_id: number }> {
+  return fetchApi<{
+    message: string
+    portfolio_id: number
+  }>(`/portfolios/${portfolioId}`, {
+    method: 'DELETE',
+  })
+}
