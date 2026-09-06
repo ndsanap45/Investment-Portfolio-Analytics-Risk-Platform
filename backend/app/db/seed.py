@@ -2,6 +2,7 @@ from datetime import datetime, timedelta
 from decimal import Decimal
 
 from app.db.database import SessionLocal
+from app.core.security import hash_password
 from app.models import User, Portfolio, Asset, Transaction, Price
 
 
@@ -20,12 +21,14 @@ def seed_database():
             user = User(
                 name="Demo Investor",
                 email="demo@portfolio.com",
-                password_hash="demo-password",
+                password_hash=hash_password("demo-password"),
                 role="user",
                 is_active=True
             )
             db.add(user)
             db.flush()
+        elif user.password_hash == "demo-password":
+            user.password_hash = hash_password("demo-password")
 
         # -------------------------
         # 2. Portfolio

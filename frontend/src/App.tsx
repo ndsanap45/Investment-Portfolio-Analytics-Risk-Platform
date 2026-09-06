@@ -2,6 +2,7 @@ import {
   Navigate,
   Route,
   Routes,
+  useLocation,
 } from 'react-router-dom'
 
 import Layout from './components/Layout'
@@ -15,10 +16,23 @@ import StressTesting from './pages/StressTesting'
 import Alerts from './pages/Alerts'
 import Reports from './pages/Reports'
 import Settings from './pages/Settings'
+import Login from './pages/login'
+
+function ProtectedLayout() {
+  const location = useLocation()
+
+  if (!localStorage.getItem('access_token')) {
+    return <Navigate to="/login" replace state={{ from: location.pathname }} />
+  }
+
+  return <Layout />
+}
 
 function App() {
   return (
     <Routes>
+
+      <Route path="/login" element={<Login />} />
 
       <Route
         path="/"
@@ -31,7 +45,7 @@ function App() {
       />
 
       <Route
-        element={<Layout />}
+        element={<ProtectedLayout />}
       >
 
         <Route
